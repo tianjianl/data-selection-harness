@@ -56,4 +56,4 @@ wget -P data/eval/xstest https://github.com/paul-rottger/exaggerated-safety/raw/
 # we use self-instruct test set, and vicuna test set for our human evaluation
 mkdir -p data/eval/creative_tasks 
 wget -O data/eval/creative_tasks/self_instruct_test.jsonl https://github.com/yizhongw/self-instruct/raw/main/human_eval/user_oriented_instructions.jsonl
-wget -O data/eval/creative_tasks/vicuna_test.jsonl https://github.com/lm-sys/FastChat/raw/main/fastchat/eval/table/question.jsonl
+wget -O data/eval/creative_tasks/vicuna_test.jsonl https://raw.githubusercontent.com/lm-sys/FastChat/f22f2194c9152a25d2987e5118206e3bbb9efd5e/fastchat/llm_judge/data/vicuna_bench/question.jsonl

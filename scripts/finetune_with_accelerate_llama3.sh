@@ -15,23 +15,24 @@ accelerate launch \
     --num_processes $NUM_GPUS \
     --use_deepspeed \
     --deepspeed_config_file ds_configs/stage3_no_offloading_accelerate.conf \
-    open_instruct/finetune.py \
-    --model_name_or_path meta-llama/Llama-2-7b-hf \
+   open_instruct/finetune.py \
+    --gradient_checkpointing \
+    --model_name_or_path meta-llama/Meta-Llama-3-8B \
     --use_flash_attn \
-    --tokenizer_name meta-llama/Llama-2-7b-hf \
+    --tokenizer_name meta-llama/Meta-Llama-3-8B \
     --use_slow_tokenizer \
     --train_file data/processed/tulu_v2/tulu_v2_data.jsonl \
-    --load_from_disk /scratch/tli104/tokenized/Llama-2-7b-hf \
+    --load_from_disk /scratch/tli104/tokenized/Meta-Llama-3-8B \
     --max_seq_length 8192 \
     --preprocessing_num_workers 30 \
     --per_device_train_batch_size $BATCH_SIZE_PER_GPU \
     --gradient_accumulation_steps $GRADIENT_ACC_STEPS \
-    --learning_rate 2e-5 \
+    --learning_rate 4e-6 \
     --lr_scheduler_type linear \
     --warmup_ratio 0.03 \
     --weight_decay 0. \
     --num_train_epochs 2 \
-    --output_dir output/tulu_v2_${MODEL_SIZE}/ \
+    --output_dir output/tulu_v2_llama3_${MODEL_SIZE}_4e-6/ \
     --with_tracking \
     --report_to wandb \
     --logging_steps 1 \

@@ -82,8 +82,8 @@ echo "Downloading LIMA dataset..."
 wget --header="Authorization: Bearer $HF_TOKEN" -P data/raw_train/lima/ https://huggingface.co/datasets/GAIR/lima/raw/main/train.jsonl
 
 
-echo "Downloading WizardLM dataset..."
-wget -P data/raw_train/wizardlm/ https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_V2_196k/resolve/main/WizardLM_evol_instruct_V2_143k.json
+#echo "Downloading WizardLM dataset..."
+#wget -P data/raw_train/wizardlm/ https://huggingface.co/datasets/WizardLM/WizardLM_evol_instruct_V2_196k/resolve/main/WizardLM_evol_instruct_V2_143k.json
 
 
 echo "Downloading the OpenOrca dataset..."
@@ -100,4 +100,4 @@ wget -P data/raw_train/hard_coded/ https://huggingface.co/datasets/hamishivi/tul
 
 
 echo "Processing datasets..."
-python open_instruct/reformat_datasets.py --raw_data_dir data/raw_train/ --output_dir data/processed/
+python open_instruct/reformat_datasets.py --raw_data_dir data/raw_train/ --output_dir data/processed/ --dataset 'tulu_v2'
