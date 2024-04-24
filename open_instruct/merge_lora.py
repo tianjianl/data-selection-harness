@@ -78,7 +78,21 @@ if __name__ == "__main__":
             args.base_model_name_or_path if args.base_model_name_or_path else peft_config.base_model_name_or_path,
         )
     print("Loading the lora model...")
+    
+    # concatenate an all zero vector to the following weight matrices
+    # base_model.model.lm_head.weight
+    # base_model.model.model.embed_tokens.weight
+    # concatentate along the 0 th dimension e.g. (1024, 768) -> (1025, 768)
+
+    for n, p in base_model.named_parameters():
+        if 'lm_head.weight' in n:
+            p.data = torch.cat([p.data, torch.zeros(1, p.shape[1])], dim=0)
+        if 'model.embed_tokens.weight' in n:
+            p.data = torch.cat([p.data, torch.zeros(1, p.shape[1])], dim=0)
+
+            
     lora_model = PeftModel.from_pretrained(base_model, args.lora_model_name_or_path)
+    
     print("Merging the lora modules...")
     merged_model = lora_model.merge_and_unload()
     
@@ -89,6 +103,9 @@ if __name__ == "__main__":
     if args.tokenizer_name_or_path:
         print(f"Loading the tokenizer from {args.tokenizer_name_or_path}...")
         tokenizer = AutoTokenizer.from_pretrained(args.tokenizer_name_or_path, use_fast=args.use_fast_tokenizer)
+        num_added_tokens = tokenizer.add_special_tokens({
+            "pad_token": "<pad>",
+        })
     else:
         try:
             print("Trying to load the tokenizer in the lora model folder...")

@@ -16,7 +16,7 @@ accelerate launch \
     --use_deepspeed \
     --deepspeed_config_file ds_configs/stage3_no_offloading_accelerate.conf \
    open_instruct/finetune.py \
-    --model_name_or_path meta-llama/Meta-Llama-3-8B \
+    --model_name_or_path output/dolly_llama3_${MODEL_SIZE}_1e-5/ \
     --use_flash_attn \
     --tokenizer_name meta-llama/Meta-Llama-3-8B \
     --use_slow_tokenizer \
@@ -29,7 +29,7 @@ accelerate launch \
     --lr_scheduler_type linear \
     --warmup_ratio 0.03 \
     --weight_decay 0. \
-    --num_train_epochs 3 \
+    --num_train_epochs 4 \
     --output_dir output/dolly_llama3_${MODEL_SIZE}_1e-5/ \
     --with_tracking \
     --report_to wandb \

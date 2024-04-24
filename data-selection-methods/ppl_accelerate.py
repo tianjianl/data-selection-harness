@@ -9,6 +9,31 @@ import sys
 import evaluate
 from evaluate import logging
 
+from accelerate import Accelerator
+
+from torch.utils.data import DataLoader, Dataset
+
+class InstructDataset(Dataset):
+    def __init__(self, jsonl_file_path):
+        self.jsonl_file_path = jsonl_file_path
+        self.data = []
+        # data looks like
+        # {"dataset": "dolly", "id": "dolly_8", "messages": [{"role": "user", "content": "Why mobile is bad for human\n"}, {"role": "assistant", "content": "We are always engaged one phone which is not good."}]}
+        # need to extract the user content as "prefix" and assistant content as "predictions"
+        with jsonlines.open(jsonl_file_path) as reader:
+            for obj in reader:
+                prefix = obj["messages"][0]["content"]
+                predictions = obj["messages"][1]["content"]
+                self.data.append((prefix, predictions))
+
+    def __len__(self):
+        return len(self.data)
+    
+    def __getitem__(self, idx):
+        prefix, predictions = self.data[idx]
+        return prefix, predictions
+    
+    
 _DESCRIPTION = """
 Perplexity (PPL) is one of the most common metrics for evaluating language models.
 It is defined as the exponentiated average negative log-likelihood of a sequence, calculated with exponent base `e`.
@@ -34,9 +59,10 @@ Returns:
         max length for the perplexity computation.
 """
 
-def compute(
-    predictions, model, tokenizer, prefix="", batch_size: int = 16, add_start_token: bool = True, device=None, max_length=None
-):
+def compute(model, tokenizer, dataloader, device='cuda', batch_size=16, add_start_token=True, max_length=None, accelerator=None):
+    
+    if accelerator is not None:
+        model, dataloader = accelerator.prepare(model, dataloader)
 
     if tokenizer.pad_token is None and batch_size > 1:
         existing_special_tokens = list(tokenizer.special_tokens_map_extended.values())
@@ -52,38 +78,23 @@ def compute(
         max_tokenized_len = max_length - 1
     else:
         max_tokenized_len = max_length
-
-    # Tokenize input texts with prefix
-    tokenized_texts = [pref + text for pref, text in zip(prefix, predictions)]
-
-    encodings = tokenizer(
-        tokenized_texts,
-        add_special_tokens=False,
-        padding=True,
-        truncation=True if max_tokenized_len else False,
-        max_length=max_tokenized_len,
-        return_tensors="pt",
-        return_attention_mask=True,
-    ).to(device)
-
-    encoded_texts = encodings["input_ids"]
-    attn_masks = encodings["attention_mask"]
-
-    if add_start_token:
-        assert torch.all(torch.ge(attn_masks.sum(1), 1)), "Each input text must be at least one token long."
-    else:
-        assert torch.all(
-            torch.ge(attn_masks.sum(1), 2)
-        ), "When add_start_token=False, each input text must be at least two tokens long. Run with add_start_token=True if inputting strings of only one token, and remove all empty input strings."
-
+    
     ppls = []
     loss_fct = CrossEntropyLoss(reduction="none")
 
-    for start_index in logging.tqdm(range(0, len(encoded_texts), batch_size)):
-        end_index = min(start_index + batch_size, len(encoded_texts))
-        encoded_batch = encoded_texts[start_index:end_index]
-        attn_mask = attn_masks[start_index:end_index]
+    for batch in dataloader:
 
+        tokenized_batch = tokenizer(
+            [prefix + prediction for prefix, prediction in batch],
+            padding="max_length",
+            max_length=max_tokenized_len,
+            truncation=True,
+            return_tensors="pt",
+        ).to(device)
+
+        encoded_batch = tokenized_batch["input_ids"]
+        attn_mask = tokenized_batch["attention_mask"]
+        
         if add_start_token:
             bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * encoded_batch.size(dim=0)).to(device)
             encoded_batch = torch.cat([bos_tokens_tensor, encoded_batch], dim=1)
@@ -101,10 +112,10 @@ def compute(
         shift_attention_mask_batch = attn_mask[..., 1:].contiguous()
 
         # Exclude tokens corresponding to the prefix when computing loss
-        if add_start_token:
-            shift_logits = shift_logits[:, len(tokenizer(prefix)) - 1 :]
-            shift_labels = shift_labels[:, len(tokenizer(prefix)) - 1 :]
-            shift_attention_mask_batch = shift_attention_mask_batch[:, len(tokenizer(prefix)) - 1 :]
+        for index, (prefix, _) in enumerate(batch):
+            shift_logits = shift_logits[index, len(tokenizer(prefix)) - 1 :]
+            shift_labels = shift_labels[index, len(tokenizer(prefix)) - 1 :]
+            shift_attention_mask_batch = shift_attention_mask_batch[index, len(tokenizer(prefix)) - 1 :]
 
         perplexity_batch = torch.exp(
             (loss_fct(shift_logits.transpose(1, 2), shift_labels) * shift_attention_mask_batch).sum(1)
@@ -122,36 +133,22 @@ all_perplexity_results = []
 jsonl_file_path = sys.argv[1]
 print(f"now evaluating perplexity of {jsonl_file_path}")
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
-model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+model_id = "meta-llama/Meta-Llama-3-70B-Instruct"
 
 model = AutoModelForCausalLM.from_pretrained(model_id)
 model = model.to(device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
+dataset = InstructDataset(jsonl_file_path, tokenizer)
+dataloader = DataLoader(dataset, batch_size=2)
 
-# Initialize the Perplexity metric
-
-# Open the JSONL file
-with jsonlines.open(jsonl_file_path) as reader:
-    # Iterate over each instance in the file
-    for instance in reader:
-        # Extract user messages (prefixes) and assistant responses (outputs)
-        prefixes = [message["content"] for message in instance["messages"] if message["role"] == "user"]
-        outputs = [message["content"] for message in instance["messages"] if message["role"] == "assistant"]
-
-        # Calculate perplexities
-        perplexity_results = compute(
-            model=model,
-			tokenizer=tokenizer,
-            prefix=prefixes,
-            predictions=outputs,
-			device=device
-        )
-        
-        # Append perplexity results for this instance to the list
-        all_perplexity_results.append(perplexity_results)
-
-# Print or use the perplexity results as needed
-for idx, result in enumerate(all_perplexity_results):
-    print(f"Instance {idx+1} - Mean Perplexity: {result['mean_perplexity']}")
-
+# Compute perplexity
+perplexity_results = compute(
+    model=model,
+    tokenizer=tokenizer,
+    dataloader=dataloader,
+    device=device,
+    batch_size=2,
+    add_start_token=True,
+    max_length=None,
+)

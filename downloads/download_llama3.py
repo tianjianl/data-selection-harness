@@ -4,7 +4,7 @@ import os
 
 #model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
 #model_id = "meta-llama/Llama-2-7b-hf"
-model_id = "meta-llama/Meta-Llama-3-8B"
+#model_id = "meta-llama/Meta-Llama-3-8B"
 
 pipeline = transformers.pipeline(
   "text-generation",

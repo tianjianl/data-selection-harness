@@ -278,10 +278,10 @@ def load_hf_tokenizer(
         from transformers import AutoTokenizer
 
         # Need to explicitly import the olmo tokenizer.
-        try:
-            from hf_olmo import OLMoTokenizerFast
-        except ImportError:
-            warnings.warn("OLMo not installed. Ignore if using a different model.")
+        #try:
+        #    from hf_olmo import OLMoTokenizerFast
+        #except ImportError:
+        #    warnings.warn("OLMo not installed. Ignore if using a different model.")
 
         if not tokenizer_name_or_path:
             tokenizer_name_or_path = model_name_or_path

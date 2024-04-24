@@ -37,10 +37,10 @@ from peft import LoraConfig, TaskType, get_peft_model, prepare_model_for_kbit_tr
 
 logger = get_logger(__name__)
 
-try:
-    from hf_olmo import OLMoTokenizerFast
-except ImportError:
-    logger.warning("OLMo not installed. Ignore if using a different model.")
+#try:
+#    from hf_olmo import OLMoTokenizerFast
+#except ImportError:
+#    logger.warning("OLMo not installed. Ignore if using a different model.")
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
@@ -267,6 +267,12 @@ def parse_args():
         choices=['mean', 'sum'],
         help='How to reduce loss over tokens. Default is mean, but using sum can improve chat model performance.',
     )
+
+    parser.add_argument(
+        '--load_from_disk',
+        type=str,
+        default=None,
+    )
     args = parser.parse_args()
 
     # Sanity checks
@@ -432,14 +438,14 @@ def main():
             os.makedirs(args.output_dir, exist_ok=True)
     
     accelerator.wait_for_everyone()
-
+	
     if args.dataset_name is not None:
         # Downloading and loading a dataset from the hub.
-        raw_datasets = load_dataset(
+	    raw_datasets = load_dataset(
             args.dataset_name,
             args.dataset_config_name,
         )
-    else:
+    else:    
         data_files = {}
         dataset_args = {}
         if args.train_file is not None:
@@ -448,7 +454,7 @@ def main():
             "json",
             data_files=data_files,
             **dataset_args,
-        )
+	    )
 
     # Load pretrained model and tokenizer
     if args.config_name:
@@ -539,6 +545,7 @@ def main():
 
     # no default pad token for llama!
     # here we add all special tokens again, because the default ones are not in the special_tokens_map
+    print(f"the type of the tokenizer is {type(tokenizer)}")
     if isinstance(tokenizer, LlamaTokenizer) or isinstance(tokenizer, LlamaTokenizerFast):
         num_added_tokens = tokenizer.add_special_tokens({
             "bos_token": "<s>",
@@ -547,19 +554,19 @@ def main():
             "pad_token": "<pad>",
         })
         assert num_added_tokens in [0, 1], "LlamaTokenizer should only add one special token - the pad_token, or no tokens if pad token present."
-    elif isinstance(tokenizer, GPTNeoXTokenizerFast):
+    elif isinstance(tokenizer, GPTNeoXTokenizerFast) or 'Llama-3' in args.model_name_or_path:
         num_added_tokens = tokenizer.add_special_tokens({
             "pad_token": "<pad>",
         })
         assert num_added_tokens == 1, "GPTNeoXTokenizer should only add one special token - the pad_token."
     elif isinstance(tokenizer, GPT2Tokenizer) and isinstance(model, OPTForCausalLM):
         num_added_tokens = tokenizer.add_special_tokens({'unk_token': '<unk>'})
-    elif isinstance(tokenizer, OLMoTokenizerFast):
-        # only the eos for olmo, but we use it as bos
-        tokenizer.bos_token = tokenizer.eos_token
-        assert args.add_bos, "For OLMo, you must add bos token to the beginning of the input sequence."
+    #elif isinstance(tokenizer, OLMoTokenizerFast):
+    #    # only the eos for olmo, but we use it as bos
+    #    tokenizer.bos_token = tokenizer.eos_token
+    #    assert args.add_bos, "For OLMo, you must add bos token to the beginning of the input sequence."
     
-
+    num_added_tokens = tokenizer.add_special_tokens({"pad_token": "<pad>",})
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
     # gather deepspeed to get "real" embedding size    
@@ -586,37 +593,40 @@ def main():
         model.print_trainable_parameters()
     elif args.gradient_checkpointing:
         model.gradient_checkpointing_enable()
-
-    # Preprocessing the datasets.
-    if "prompt" in raw_datasets["train"].column_names and "completion" in raw_datasets["train"].column_names:
-        encode_function = partial(
-            encode_with_prompt_completion_format,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            add_bos=args.add_bos,
-        )
-    elif "messages" in raw_datasets["train"].column_names:
-        encode_function = partial(
-            encode_with_messages_format,
-            tokenizer=tokenizer,
-            max_seq_length=args.max_seq_length,
-            add_bos=args.add_bos,
-        )
-    else:
-        raise ValueError("You need to have either 'prompt'&'completion' or 'messages' in your column names.")
     
-    with accelerator.main_process_first():
-        lm_datasets = raw_datasets.map(
-            encode_function,
-            batched=False,
-            num_proc=args.preprocessing_num_workers,
-            load_from_cache_file=not args.overwrite_cache,
-            remove_columns=[name for name in raw_datasets["train"].column_names if name not in ["input_ids", "labels", "attention_mask"]],
-            desc="Tokenizing and reformatting instruction data",
-        )
-        lm_datasets.set_format(type="pt")
-        lm_datasets = lm_datasets.filter(lambda example: (example['labels'] != -100).any())
-
+    # Preprocessing the datasets.
+    if args.load_from_disk is None:
+        if "prompt" in raw_datasets["train"].column_names and "completion" in raw_datasets["train"].column_names:
+            encode_function = partial(
+                encode_with_prompt_completion_format,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                add_bos=args.add_bos,
+            )
+        elif "messages" in raw_datasets["train"].column_names:
+            encode_function = partial(
+                encode_with_messages_format,
+                tokenizer=tokenizer,
+                max_seq_length=args.max_seq_length,
+                add_bos=args.add_bos,
+            )
+        else:
+            raise ValueError("You need to have either 'prompt'&'completion' or 'messages' in your column names.")
+        
+        with accelerator.main_process_first():
+            lm_datasets = raw_datasets.map(
+                encode_function,
+                batched=False,
+                num_proc=args.preprocessing_num_workers,
+                load_from_cache_file=not args.overwrite_cache,
+                remove_columns=[name for name in raw_datasets["train"].column_names if name not in ["input_ids", "labels", "attention_mask"]],
+                desc="Tokenizing and reformatting instruction data",
+            )
+            lm_datasets.set_format(type="pt")
+            lm_datasets = lm_datasets.filter(lambda example: (example['labels'] != -100).any())
+    else:
+        lm_datasets = datasets.load_from_disk(args.load_from_disk)
+        
     train_dataset = lm_datasets["train"]
 
     # Log a few random samples from the training set:

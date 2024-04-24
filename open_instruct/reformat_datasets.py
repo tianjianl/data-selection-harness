@@ -490,36 +490,36 @@ def convert_lima_data(data_dir, output_dir, num_examples=None):
             }) + "\n")
 
 
-def convert_wizardlm_data(data_dir, output_dir, num_examples=30000):
-    os.makedirs(output_dir, exist_ok=True)
-    examples = []
-    with open(os.path.join(data_dir, "WizardLM_evol_instruct_V2_143k.json"), "r") as fin:
-        examples = json.load(fin)
-    if num_examples:
-        examples = random.sample(examples, k=num_examples)
+#def convert_wizardlm_data(data_dir, output_dir, num_examples=30000):
+#    os.makedirs(output_dir, exist_ok=True)
+#    examples = []
+#    with open(os.path.join(data_dir, "WizardLM_evol_instruct_V2_143k.json"), "r") as fin:
+#        examples = json.load(fin)
+#    if num_examples:
+#        examples = random.sample(examples, k=num_examples)
 
-    output_path = os.path.join(output_dir, "wizardlm_data.jsonl")
-    with open(output_path, "w") as fout:
-        for idx, example in enumerate(examples):
-            messages = []
-            assert len(example["conversations"]) % 2 == 0
-            for i in range(0, len(example["conversations"]), 2):
-                assert example["conversations"][i]["from"] == "human"
-                assert example["conversations"][i+1]["from"] == "gpt"
-                messages.append({
-                    "role": "user",
-                    "content": example["conversations"][i]["value"]
-                })
-                messages.append({
-                    "role": "assistant",
-                    "content": example["conversations"][i+1]["value"]
-                })
-            fout.write(json.dumps({
-                "dataset": "wizardlm",
-                "id": f"wizardlm_{example['idx']}",
-                "messages": messages,
-            }) + "\n")
-
+#    output_path = os.path.join(output_dir, "wizardlm_data.jsonl")
+#    with open(output_path, "w") as fout:
+#        for idx, example in enumerate(examples):
+#            messages = []
+#            assert len(example["conversations"]) % 2 == 0
+#            for i in range(0, len(example["conversations"]), 2):
+#                assert example["conversations"][i]["from"] == "human"
+#                assert example["conversations"][i+1]["from"] == "gpt"
+#                messages.append({
+#                    "role": "user",
+#                    "content": example["conversations"][i]["value"]
+#                })
+#                messages.append({
+#                    "role": "assistant",
+#                    "content": example["conversations"][i+1]["value"]
+#                })
+#            fout.write(json.dumps({
+#                "dataset": "wizardlm",
+#                "id": f"wizardlm_{example['idx']}",
+#                "messages": messages,
+#            }) + "\n")
+#
 
 def convert_open_orca_data(data_dir, output_dir, num_gpt4_examples=30000, num_gpt35_examples=0):
     os.makedirs(output_dir, exist_ok=True)
@@ -749,11 +749,11 @@ if __name__ == "__main__":
                 data_file="sharegpt_html_cleaned_and_split_4096.json",
                 num_examples=None
             )
-            convert_wizardlm_data(
-                data_dir=os.path.join(args.raw_data_dir, "wizardlm"), 
-                output_dir=os.path.join(args.output_dir, "tulu_v2", "wizardlm_subset"), 
-                num_examples=30000
-            )
+            #convert_wizardlm_data(
+            #    data_dir=os.path.join(args.raw_data_dir, "wizardlm"), 
+            #    output_dir=os.path.join(args.output_dir, "tulu_v2", "wizardlm_subset"), 
+            #    num_examples=30000
+            #)
             convert_open_orca_data(
                 data_dir=os.path.join(args.raw_data_dir, "open_orca"), 
                 output_dir=os.path.join(args.output_dir, "tulu_v2", "open_orca_subset"), 
